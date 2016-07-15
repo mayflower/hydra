@@ -153,7 +153,8 @@ static void findJobsWrapped(EvalState & state, JSONObject & top,
                done. */
             if (gcRootsDir != "") {
                 Path root = gcRootsDir + "/" + baseNameOf(drvPath);
-                if (!pathExists(root)) state.store->addPermRoot(drvPath, root, false);
+                auto store = state.store.cast<LocalFSStore>();
+                if (!pathExists(root)) store->addPermRoot(drvPath, root, false);
             }
 
             res.attr("outputs");

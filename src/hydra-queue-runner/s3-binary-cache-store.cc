@@ -32,9 +32,10 @@ R && checkAws(const FormatOrString & fs, Aws::Utils::Outcome<R, E> && outcome)
     return outcome.GetResultWithOwnership();
 }
 
-S3BinaryCacheStore::S3BinaryCacheStore(std::shared_ptr<Store> localStore,
+S3BinaryCacheStore::S3BinaryCacheStore(std::map<string, string> params,
+    std::shared_ptr<Store> localStore,
     const Path & secretKeyFile, const std::string & bucketName)
-    : BinaryCacheStore(localStore, secretKeyFile)
+    : BinaryCacheStore(params)
     , bucketName(bucketName)
     , config(makeConfig())
     , client(make_ref<Aws::S3::S3Client>(*config))
@@ -57,7 +58,7 @@ ref<Aws::Client::ClientConfiguration> S3BinaryCacheStore::makeConfig()
 
 void S3BinaryCacheStore::init()
 {
-    if (!diskCache->cacheExists(getUri())) {
+    if (!diskCache->cacheExists(getUri(), wantMassQuery_, priority)) {
 
         /* Create the bucket if it doesn't already exists. */
         // FIXME: HeadBucket would be more appropriate, but doesn't return
@@ -79,7 +80,7 @@ void S3BinaryCacheStore::init()
                            Aws::S3::Model::BucketLocationConstraint::US) */ )));
         }
 
-        diskCache->createCache(getUri());
+        diskCache->createCache(getUri(), storeDir, wantMassQuery_, priority);
     }
 
     BinaryCacheStore::init();

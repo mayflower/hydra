@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cmath>
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -34,10 +35,10 @@ static void openConnection(Machine::ptr machine, Path tmpDir, int stderrFD, Chil
 
     child.pid = startProcess([&]() {
 
-        if (dup2(to.readSide, STDIN_FILENO) == -1)
+        if (dup2(to.readSide.get(), STDIN_FILENO) == -1)
             throw SysError("cannot dup input pipe to stdin");
 
-        if (dup2(from.writeSide, STDOUT_FILENO) == -1)
+        if (dup2(from.writeSide.get(), STDOUT_FILENO) == -1)
             throw SysError("cannot dup output pipe to stdout");
 
         if (dup2(stderrFD, STDERR_FILENO) == -1)
@@ -66,11 +67,8 @@ static void openConnection(Machine::ptr machine, Path tmpDir, int stderrFD, Chil
         throw SysError("cannot start ssh");
     });
 
-    to.readSide.close();
-    from.writeSide.close();
-
-    child.to = to.writeSide.borrow();
-    child.from = from.readSide.borrow();
+    child.to = std::move(to.writeSide);
+    child.from = std::move(from.readSide);
 }
 
 
@@ -92,7 +90,7 @@ static void copyClosureTo(ref<Store> destStore,
 
     /* Get back the set of paths that are already valid on the remote
        host. */
-    auto present = readStorePaths<PathSet>(from);
+    auto present = readStorePaths<PathSet>(*destStore, from);
 
     if (present.size() == closure.size()) return;
 
@@ -105,7 +103,7 @@ static void copyClosureTo(ref<Store> destStore,
     printMsg(lvlDebug, format("sending %1% missing paths") % missing.size());
 
     to << cmdImportPaths;
-    destStore->exportPaths(missing, false, to);
+    destStore->exportPaths(missing, to);
     to.flush();
 
     if (readInt(from) != 1)
@@ -125,7 +123,7 @@ void State::buildRemote(ref<Store> destStore,
     createDirs(dirOf(result.logFile));
 
     AutoCloseFD logFD(open(result.logFile.c_str(), O_CREAT | O_TRUNC | O_WRONLY, 0666));
-    if (logFD == -1) throw SysError(format("creating log file ‘%1%’") % result.logFile);
+    if (logFD.get() == -1) throw SysError(format("creating log file ‘%1%’") % result.logFile);
 
     nix::Path tmpDir = createTempDir();
     AutoDelete tmpDirDel(tmpDir, true);
@@ -133,12 +131,10 @@ void State::buildRemote(ref<Store> destStore,
     try {
 
         Child child;
-        openConnection(machine, tmpDir, logFD, child);
+        openConnection(machine, tmpDir, logFD.get(), child);
 
-        logFD.close();
-
-        FdSource from(child.from);
-        FdSink to(child.to);
+        FdSource from(child.from.get());
+        FdSink to(child.to.get());
 
         Finally updateStats([&]() {
             bytesReceived += from.read;
@@ -359,7 +355,7 @@ void State::buildRemote(ref<Store> destStore,
 
             to << cmdExportPaths << 0 << outputs;
             to.flush();
-            destStore->importPaths(false, from, result.accessor);
+            destStore->importPaths(from, result.accessor);
 
             auto now2 = std::chrono::steady_clock::now();
 
@@ -367,7 +363,6 @@ void State::buildRemote(ref<Store> destStore,
         }
 
         /* Shut down the connection. */
-        child.to.close();
         child.pid.wait(true);
 
     } catch (Error & e) {
@@ -381,7 +376,7 @@ void State::buildRemote(ref<Store> destStore,
         if (info->consecutiveFailures == 0 || info->lastFailure < now - std::chrono::seconds(30)) {
             info->consecutiveFailures = std::min(info->consecutiveFailures + 1, (unsigned int) 4);
             info->lastFailure = now;
-            int delta = retryInterval * powf(retryBackoff, info->consecutiveFailures - 1) + (rand() % 30);
+            int delta = retryInterval * std::pow(retryBackoff, info->consecutiveFailures - 1) + (rand() % 30);
             printMsg(lvlInfo, format("will disable machine ‘%1%’ for %2%s") % machine->sshName % delta);
             info->disabledUntil = now + std::chrono::seconds(delta);
         }

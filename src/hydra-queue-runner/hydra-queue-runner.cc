@@ -7,6 +7,7 @@
 
 #include "state.hh"
 #include "build-result.hh"
+#include "local-binary-cache-store.hh"
 #include "s3-binary-cache-store.hh"
 
 #include "shared.hh"
@@ -441,7 +442,7 @@ void State::logCompressor()
             // FIXME: use libbz2
 
             Pid pid = startProcess([&]() {
-                if (dup2(fd, STDOUT_FILENO) == -1)
+                if (dup2(fd.get(), STDOUT_FILENO) == -1)
                     throw SysError("cannot dup output pipe to stdout");
                 execlp("bzip2", "bzip2", "-c", item.logPath.c_str(), nullptr);
                 throw SysError("cannot start bzip2");
@@ -806,10 +807,9 @@ void State::run(BuildID buildOne)
         auto dir = hydraConfig["binary_cache_dir"];
         if (dir == "")
             throw Error("you must set ‘binary_cache_dir’ in hydra.conf");
-        _destStore = openLocalBinaryCacheStore(
-            _localStore,
-            hydraConfig["binary_cache_secret_key_file"],
-            dir);
+        _destStore = std::make_shared<LocalBinaryCacheStore>(
+            hydraConfig, dir
+        );
     }
 
     else if (storeMode == "s3-binary-cache") {
@@ -817,6 +817,7 @@ void State::run(BuildID buildOne)
         if (bucketName == "")
             throw Error("you must set ‘binary_cache_s3_bucket’ in hydra.conf");
         auto store = make_ref<S3BinaryCacheStore>(
+            hydraConfig,
             _localStore,
             hydraConfig["binary_cache_secret_key_file"],
             bucketName);
@@ -920,7 +921,6 @@ int main(int argc, char * * argv)
             return true;
         });
 
-        settings.buildVerbosity = lvlVomit;
         settings.lockCPU = false;
 
         State state;

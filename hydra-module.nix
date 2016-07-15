@@ -4,7 +4,7 @@ with lib;
 
 let
 
-  cfg = config.services.hydra;
+  cfg = config.services.hydra-mf;
 
   baseDir = "/var/lib/hydra";
 
@@ -42,7 +42,7 @@ in
   ###### interface
   options = {
 
-    services.hydra = rec {
+    services.hydra-mf = rec {
 
       enable = mkOption {
         type = types.bool;

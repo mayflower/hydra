@@ -20,7 +20,8 @@ private:
 
 public:
 
-    S3BinaryCacheStore(std::shared_ptr<Store> localStore,
+    S3BinaryCacheStore(std::map<string, string> params,
+        std::shared_ptr<Store> localStore,
         const Path & secretKeyFile, const std::string & bucketName);
 
     void init() override;

@@ -43,7 +43,7 @@ rec {
 
     let
 
-      nix = nixUnstable;
+      nix = (import ../nix/release.nix {}).build.x86_64-linux;
 
       NetStatsd = buildPerlPackage {
         name = "Net-Statsd-0.11";
@@ -174,6 +174,7 @@ rec {
         done
       ''; # */
 
+      doCheck = false;
       dontStrip = true;
 
       meta.description = "Build of Hydra on ${system}";
