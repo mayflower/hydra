@@ -515,7 +515,7 @@ sub readNixFile {
 
 sub isLocalStore {
     my $uri = getStoreUri();
-    return $uri =~ "^(local|daemon|auto)";
+    return $uri =~ "^(file|local|daemon|auto)";
 }
 
 
